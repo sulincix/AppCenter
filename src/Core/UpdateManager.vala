@@ -20,8 +20,7 @@
 
 public class AppCenterCore.UpdateManager : Object {
     public bool restart_required { public get; private set; default = false; }
-    public Package os_updates { public get; private set; }
-
+    
     private const string RESTART_REQUIRED_FILE = "/var/run/reboot-required";
 
     private File restart_file;
@@ -33,28 +32,11 @@ public class AppCenterCore.UpdateManager : Object {
         icon.set_name ("distributor-logo");
         icon.set_kind (AppStream.IconKind.STOCK);
 
-        var os_updates_component = new AppStream.Component ();
-        os_updates_component.id = AppCenterCore.Package.OS_UPDATES_ID;
-        os_updates_component.name = _("Operating System Updates");
-        os_updates_component.summary = _("Updates to system components");
-        os_updates_component.add_icon (icon);
-
-        os_updates = new AppCenterCore.Package (BackendAggregator.get_default (), os_updates_component);
     }
 
     public async uint get_updates (Cancellable? cancellable = null) {
         var apps_with_updates = new Gee.TreeSet<Package> ();
         uint count = 0;
-
-        // Clear any packages previously marked as updatable
-        var installed_packages = yield BackendAggregator.get_default ().get_installed_applications ();
-        foreach (var installed_package in installed_packages) {
-            installed_package.change_information.clear_update_info ();
-            installed_package.update_state ();
-        }
-
-        uint os_count = 0;
-        string os_desc = "";
 
         unowned FlatpakBackend fp_client = FlatpakBackend.get_default ();
         var flatpak_updates = yield fp_client.get_updates ();
@@ -72,48 +54,13 @@ public class AppCenterCore.UpdateManager : Object {
                 } catch (Error e) {
                     warning ("Unable to get flatpak download size: %s", e.message);
                 }
-            } else {
-                debug ("Added %s to OS updates", flatpak_update);
-                var name = flatpak_update.split ("/")[2];
-                os_count++;
-                os_desc += Markup.printf_escaped (
-                    "<li>%s\n\t%s</li>",
-                    name,
-                    _("Flatpak runtime")
-                );
-
-                uint64 dl_size = 0;
-                try {
-                    dl_size = yield fp_client.get_download_size_by_id (flatpak_update, null, true);
-                } catch (Error e) {
-                    warning ("Unable to get flatpak download size: %s", e.message);
-                }
-
-                os_updates.change_information.size += dl_size;
-                os_updates.change_information.updatable_packages.@set (fp_client, flatpak_update);
             }
         }
 
-        if (os_count == 0) {
-            debug ("No OS updates found");
-            var latest_version = _("No components with updates");
-            os_updates.latest_version = latest_version;
-            os_updates.description = GLib.Markup.printf_escaped ("<p>%s</p>\n", latest_version);
-        } else {
-            debug ("%u OS updates found", os_count);
-            var latest_version = ngettext ("%u component with updates", "%u components with updates", os_count).printf (os_count);
-            os_updates.latest_version = latest_version;
-            os_updates.description = "<p>%s</p>\n<ul>\n%s</ul>\n".printf (GLib.Markup.printf_escaped (_("%s:"), latest_version), os_desc);
-        }
 
         count = apps_with_updates.size;
         debug ("%u app updates found", count);
-        if (os_count > 0) {
-            count += 1;
-        }
 
-
-        os_updates.update_state ();
         return count;
     }
 
