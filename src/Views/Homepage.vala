@@ -184,7 +184,6 @@ namespace AppCenter {
 
         private async void load_banners () {
             var houston = AppCenterCore.Houston.get_default ();
-            var pk_client = AppCenterCore.PackageKitBackend.get_default ();
             var packages_for_banner = new Gee.LinkedList<AppCenterCore.Package> ();
 
             var newest_ids = yield houston.get_app_ids ("/newest/project");
@@ -194,22 +193,6 @@ namespace AppCenter {
             Utils.shuffle_array (trending_ids);
 
             var packages = new Gee.HashMap<string, AppCenterCore.Package> ();
-            packages.set_all (pk_client.get_packages_for_component_ids (newest_ids));
-            packages.set_all (pk_client.get_packages_for_component_ids (updated_ids));
-            packages.set_all (pk_client.get_packages_for_component_ids (trending_ids));
-
-            if (!AppCenterCore.PackageKitBackend.supports_parallel_package_queries) {
-                foreach (var package in packages.values) {
-                    package.update_state ();
-                }
-            } else {
-                try {
-                    yield pk_client.update_multiple_package_state (packages.values);
-                } catch (Error e) {
-                    warning ("Error while getting installed state of banner packages: %s", e.message);
-                }
-            }
-
             foreach (var package in newest_ids) {
                 if (packages_for_banner.size >= NUM_PACKAGES_IN_BANNER) {
                     break;

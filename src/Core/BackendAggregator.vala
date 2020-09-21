@@ -25,8 +25,6 @@ public class AppCenterCore.BackendAggregator : Backend, Object {
 
     construct {
         backends = new Gee.ArrayList<unowned Backend> ();
-        backends.add (PackageKitBackend.get_default ());
-        backends.add (UbuntuDriversBackend.get_default ());
         backends.add (FlatpakBackend.get_default ());
 
         foreach (var backend in backends) {

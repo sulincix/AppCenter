@@ -333,25 +333,14 @@ public class AppCenterCore.Package : Object {
     public string origin_description {
         owned get {
             unowned string origin = component.get_origin ();
-            if (backend is PackageKitBackend) {
-                if (origin == APPCENTER_PACKAGE_ORIGIN) {
-                    return _("AppCenter");
-                } else if (origin == DEPRECATED_ELEMENTARY_STABLE_PACKAGE_ORIGIN || origin == ELEMENTARY_STABLE_PACKAGE_ORIGIN) {
-                    return _("elementary Updates");
-                } else if (origin.has_prefix ("ubuntu-")) {
-                    return _("Ubuntu (non-curated)");
-                }
-            } else if (backend is FlatpakBackend) {
+            if (backend is FlatpakBackend) {
                 var fp_package = this as FlatpakPackage;
                 if (fp_package != null && fp_package.installation == FlatpakBackend.system_installation) {
                     return _("%s (system-wide)").printf (origin);
                 }
 
                 return origin;
-            } else if (backend is UbuntuDriversBackend) {
-                return _("Ubuntu Drivers");
             }
-
             return _("Unknown Origin (non-curated)");
         }
     }
@@ -439,12 +428,6 @@ public class AppCenterCore.Package : Object {
         _author = null;
         _author_title = null;
         backend_details = null;
-
-        // The version on a PackageKit package comes from the package not AppStream, so only reset the version
-        // on other backends
-        if (!(backend is PackageKitBackend)) {
-            _latest_version = null;
-        }
 
         this.component = component;
     }

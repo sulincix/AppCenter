@@ -144,9 +144,6 @@ public class AppCenter.App : Gtk.Application {
 
         var client = AppCenterCore.Client.get_default ();
 
-        if (fake_update_packages != null) {
-            AppCenterCore.PackageKitBackend.get_default ().fake_packages = fake_update_packages;
-        }
 
         if (silent) {
             NetworkMonitor.get_default ().network_changed.connect ((available) => {
@@ -158,16 +155,6 @@ public class AppCenter.App : Gtk.Application {
             silent = false;
             hold ();
             return;
-        }
-
-        if (local_path != null) {
-            var file = File.new_for_commandline_arg (local_path);
-
-            try {
-                local_package = AppCenterCore.PackageKitBackend.get_default ().add_local_component_file (file);
-            } catch (Error e) {
-                warning ("Failed to load local AppStream XML file: %s", e.message);
-            }
         }
 
         if (main_window == null) {
@@ -277,10 +264,6 @@ public class AppCenter.App : Gtk.Application {
                     send_notification ("installed", notification);
                 } else {
                     // Check if permission was denied or the operation was cancelled
-                    if (error.matches (IOError.quark (), 19) || error.matches (Pk.ClientError.quark (), 303)) {
-                        break;
-                    }
-
                     var dialog = new InstallFailDialog (package, error);
 
                     dialog.show_all ();

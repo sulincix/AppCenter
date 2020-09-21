@@ -53,44 +53,8 @@ public class AppCenterCore.UpdateManager : Object {
             installed_package.update_state ();
         }
 
-        Pk.Results pk_updates;
-        unowned PackageKitBackend client = PackageKitBackend.get_default ();
-        try {
-            pk_updates = yield client.get_updates (cancellable);
-        } catch (Error e) {
-            warning ("Unable to get updates from PackageKit backend: %s", e.message);
-            return 0;
-        }
-
         uint os_count = 0;
         string os_desc = "";
-
-        var package_array = pk_updates.get_package_array ();
-        debug ("PackageKit backend reports %d updates", package_array.length);
-
-        package_array.foreach ((pk_package) => {
-            var pkg_name = pk_package.get_name ();
-            var appcenter_package = client.lookup_package_by_id (pkg_name);
-            if (appcenter_package != null) {
-                debug ("Added %s to app updates", pkg_name);
-                apps_with_updates.add (appcenter_package);
-                appcenter_package.latest_version = pk_package.get_version ();
-            } else {
-                debug ("Added %s to OS updates", pkg_name);
-                os_count++;
-                unowned string pkg_summary = pk_package.get_summary ();
-                unowned string pkg_version = pk_package.get_version ();
-                os_desc += Markup.printf_escaped (
-                    "<li>%s\n\t%s\n\t%s</li>\n",
-                    pkg_name,
-                    pkg_summary,
-                    _("Version: %s").printf (pkg_version)
-                );
-            }
-        });
-
-        os_updates.component.set_pkgnames ({});
-        os_updates.change_information.clear_update_info ();
 
         unowned FlatpakBackend fp_client = FlatpakBackend.get_default ();
         var flatpak_updates = yield fp_client.get_updates ();
@@ -148,28 +112,6 @@ public class AppCenterCore.UpdateManager : Object {
             count += 1;
         }
 
-        pk_updates.get_details_array ().foreach ((pk_detail) => {
-            var pk_package = new Pk.Package ();
-            try {
-                pk_package.set_id (pk_detail.get_package_id ());
-                var pkg_name = pk_package.get_name ();
-                var appcenter_package = client.lookup_package_by_id (pkg_name);
-                    if (appcenter_package != null) {
-                        appcenter_package.change_information.updatable_packages.@set (client, pk_package.get_id ());
-                        appcenter_package.change_information.size += pk_detail.size;
-                        appcenter_package.update_state ();
-                    } else {
-                        var pkgnames = os_updates.component.pkgnames;
-                        pkgnames += pkg_name;
-                        os_updates.component.pkgnames = pkgnames;
-
-                        os_updates.change_information.updatable_packages.@set (client, pk_package.get_id ());
-                        os_updates.change_information.size += pk_detail.size;
-                    }
-            } catch (Error e) {
-                critical (e.message);
-            }
-        });
 
         os_updates.update_state ();
         return count;
