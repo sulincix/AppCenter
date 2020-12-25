@@ -24,7 +24,7 @@ public class UninstallConfirmDialog : Granite.MessageDialog {
             title: "",
             secondary_text: _("Uninstalling this app may also delete its data."),
             buttons: Gtk.ButtonsType.CANCEL,
-            badge_icon: new ThemedIcon ("edit-delete"),
+            //badge_icon: new ThemedIcon ("edit-delete"),
             window_position: Gtk.WindowPosition.CENTER,
             package: package
         );

@@ -25,7 +25,7 @@ public class InstallFailDialog : Granite.MessageDialog {
             title: "",
             secondary_text: _("This may be a temporary issue or could have been caused by external or manually compiled software."),
             buttons: Gtk.ButtonsType.CLOSE,
-            badge_icon: new ThemedIcon ("dialog-error"),
+            //badge_icon: new ThemedIcon ("dialog-error"),
             window_position: Gtk.WindowPosition.CENTER,
             error: error,
             package: package

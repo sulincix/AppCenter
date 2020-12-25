@@ -82,12 +82,12 @@ public class AppCenterCore.Client : Object {
             application.withdraw_notification ("io.elementary.appcenter.updates");
         }
 
-        try {
+        /*try {
             yield Granite.Services.Application.set_badge (updates_number);
             yield Granite.Services.Application.set_badge_visible (updates_number != 0);
         } catch (Error e) {
             warning ("Error setting updates badge: %s", e.message);
-        }
+        }*/
 
         update_notification_mutex.unlock ();
 
