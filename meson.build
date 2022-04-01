@@ -11,7 +11,6 @@ i18n = import('i18n')
 add_project_arguments(
     '-DGETTEXT_PACKAGE="@0@"'.format(gettext_name),
     '-DHANDY_USE_UNSTABLE_API',
-    '-DI_KNOW_THE_PACKAGEKIT_GLIB2_API_IS_SUBJECT_TO_CHANGE',
     language:'c'
 )
 
@@ -23,7 +22,6 @@ gee = dependency ('gee-0.8')
 gtk = dependency ('gtk+-3.0', version: '>=3.10')
 granite = dependency ('granite', version: '>=6.0.0')
 handy = dependency('libhandy-1', version: '>=1.0.0')
-packagekit = dependency ('packagekit-glib2')
 appstream = dependency ('appstream', version: '>=0.12.10')
 libsoup = dependency ('libsoup-2.4')
 json = dependency ('json-glib-1.0')
@@ -40,7 +38,6 @@ dependencies = [
     gtk,
     granite,
     handy,
-    packagekit,
     appstream,
     libsoup,
     json,
