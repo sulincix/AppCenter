@@ -1,7 +1,7 @@
 project(
     'io.elementary.appcenter',
     'vala', 'c',
-    version: '3.4.2'
+    version: '3.9.1'
 )
 
 gettext_name = meson.project_name()
@@ -21,9 +21,10 @@ add_project_arguments(['--vapidir', vapi_dir], language: 'vala')
 glib = dependency ('glib-2.0')
 gee = dependency ('gee-0.8')
 gtk = dependency ('gtk+-3.0', version: '>=3.10')
-granite = dependency ('granite', version: '>=5.2.3')
-handy = dependency('libhandy-0.0', version: '>=0.0.10')
-appstream = dependency ('appstream', version: '>=0.12.5')
+granite = dependency ('granite', version: '>=6.0.0')
+handy = dependency('libhandy-1', version: '>=1.0.0')
+packagekit = dependency ('packagekit-glib2')
+appstream = dependency ('appstream', version: '>=0.12.10')
 libsoup = dependency ('libsoup-2.4')
 json = dependency ('json-glib-1.0')
 flatpak = dependency ('flatpak')
@@ -39,6 +40,7 @@ dependencies = [
     gtk,
     granite,
     handy,
+    packagekit,
     appstream,
     libsoup,
     json,
@@ -51,7 +53,6 @@ dependencies = [
 config_dir = join_paths(get_option('sysconfdir'), meson.project_name())
 conf_data = configuration_data()
 conf_data.set('PROJECT_NAME', meson.project_name())
-conf_data.set('DESKTOP_ICON', get_option('icon'))
 conf_data.set('EXEC_NAME', meson.project_name())
 conf_data.set('GETTEXT_PACKAGE', meson.project_name())
 conf_data.set('APP_NAME', get_option('name'))
@@ -59,7 +60,7 @@ conf_data.set('HIDDEN_APP_LIST', get_option('hidden_app_list_file'))
 conf_data.set('VERSION', meson.project_version())
 conf_data.set('CONFIGDIR', config_dir)
 conf_data.set('EXEC_PATH', join_paths (get_option('prefix'), get_option('bindir'), meson.project_name()))
-conf_data.set('HOUSTON_API_URL', get_option('api_url'))
+conf_data.set('LOCALEDIR', join_paths(get_option('prefix'), get_option('localedir')))
 
 subdir('data')
 subdir('src')

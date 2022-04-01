@@ -17,7 +17,7 @@
  * Authored by: Corentin Noël <corentin@elementary.io>
  */
 
-public class AppCenter.Views.InstalledView : View {
+public class AppCenter.Views.InstalledView : AbstractView {
     private Cancellable refresh_cancellable;
 
     private AppListUpdateView app_list_view;
@@ -74,6 +74,9 @@ public class AppCenter.Views.InstalledView : View {
 
         if (!refresh_cancellable.is_cancelled ()) {
             app_list_view.clear ();
+
+            var os_updates = AppCenterCore.UpdateManager.get_default ().os_updates;
+            app_list_view.add_package (os_updates);
             app_list_view.add_packages (installed_apps);
         }
 

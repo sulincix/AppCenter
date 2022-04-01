@@ -24,11 +24,6 @@ namespace AppCenter.Views {
     public class AppListUpdateView : AbstractAppList {
         private Gtk.SizeGroup action_button_group;
         private bool updating_all_apps = false;
-        private bool apps_remaining_started = false;
-        private GLib.Mutex update_mutex;
-        private uint apps_done = 0;
-        private Gee.LinkedList<AppCenterCore.Package> apps_to_update;
-        private AppCenterCore.Package first_package;
 
         construct {
             action_button_group = new Gtk.SizeGroup (Gtk.SizeGroupMode.BOTH);
@@ -43,10 +38,7 @@ namespace AppCenter.Views {
             list_box.set_header_func ((Gtk.ListBoxUpdateHeaderFunc) row_update_header);
             list_box.set_placeholder (loading_view);
 
-            update_mutex = GLib.Mutex ();
-            apps_to_update = new Gee.LinkedList<AppCenterCore.Package> ();
-
-            var info_label = new Gtk.Label (_("A restart is required to complete the installation of updates"));
+            var info_label = new Gtk.Label (_("A restart is required to finish installing updates"));
             info_label.show ();
 
             var infobar = new Gtk.InfoBar ();
@@ -62,8 +54,11 @@ namespace AppCenter.Views {
                     try {
                         SuspendControl.get_default ().reboot ();
                     } catch (GLib.Error e) {
-                        var dialog = new AppCenter.Widgets.RestartDialog ();
-                        dialog.show_all ();
+                        if (!(e is IOError.CANCELLED)) {
+                            info_label.label = _("Requesting a restart failed. Restart manually to finish installing updates");
+                            infobar.message_type = Gtk.MessageType.ERROR;
+                            restart_button.visible = false;
+                        }
                     }
                 }
             });
@@ -79,12 +74,12 @@ namespace AppCenter.Views {
                 add_row_for_package (package);
             }
 
-            on_list_changed ();
+            list_box.invalidate_sort ();
         }
 
         public override void add_package (AppCenterCore.Package package) {
             add_row_for_package (package);
-            on_list_changed ();
+            list_box.invalidate_sort ();
         }
 
         private void add_row_for_package (AppCenterCore.Package package) {
@@ -92,35 +87,46 @@ namespace AppCenter.Views {
 
             // Only add row if this package needs an update or it's not a font or plugin
             if (needs_update || (!package.is_plugin && !package.is_font)) {
-                var row = construct_row_for_package (package);
-                add_row (row);
+                var row = new Widgets.PackageRow.installed (package, action_button_group);
+                list_box.add (row);
             }
         }
 
-        protected override void on_list_changed () {
-            list_box.invalidate_sort ();
-        }
-
-        protected override Widgets.AppListRow construct_row_for_package (AppCenterCore.Package package) {
-            return new Widgets.PackageRow.installed (package, info_grid_group, action_button_group);
-        }
-
         [CCode (instance_pos = -1)]
-        protected override int package_row_compare (Widgets.AppListRow row1, Widgets.AppListRow row2) {
-            bool a_is_updating = row1.get_is_updating ();
-            bool b_is_updating = row2.get_is_updating ();
+        protected override int package_row_compare (Widgets.PackageRow row1, Widgets.PackageRow row2) {
+            var row1_package = row1.get_package ();
+            var row2_package = row2.get_package ();
+
+            bool a_has_updates = false;
+            bool a_is_driver = false;
+            bool a_is_os = false;
+            bool a_is_updating = false;
+            string a_package_name = "";
+            if (row1_package != null) {
+                a_has_updates = row1_package.update_available;
+                a_is_driver = row1_package.is_driver;
+                a_is_os = row1_package.is_os_updates;
+                a_is_updating = row1_package.is_updating;
+                a_package_name = row1_package.get_name ();
+            }
+
+            bool b_has_updates = false;
+            bool b_is_driver = false;
+            bool b_is_os = false;
+            bool b_is_updating = false;
+            string b_package_name = "";
+            if (row2_package != null) {
+                b_has_updates = row2_package.update_available;
+                b_is_driver = row2_package.is_driver;
+                b_is_os = row2_package.is_os_updates;
+                b_is_updating = row2_package.is_updating;
+                b_package_name = row1_package.get_name ();
+            }
 
             // The currently updating package is always top of the list
             if (a_is_updating || b_is_updating) {
                 return a_is_updating ? -1 : 1;
             }
-
-            bool a_has_updates = row1.get_update_available ();
-            bool b_has_updates = row2.get_update_available ();
-
-            bool a_is_os = row1.get_is_os_updates ();
-            bool b_is_os = row2.get_is_os_updates ();
-
             // Sort updatable OS updates first, then other updatable packages
             if (a_has_updates != b_has_updates) {
                 if (a_is_os && a_has_updates) {
@@ -140,9 +146,6 @@ namespace AppCenter.Views {
                 }
             }
 
-            bool a_is_driver = row1.get_is_driver ();
-            bool b_is_driver = row2.get_is_driver ();
-
             if (a_is_driver != b_is_driver) {
                 return a_is_driver ? - 1 : 1;
             }
@@ -152,16 +155,32 @@ namespace AppCenter.Views {
                 return a_is_os ? -1 : 1;
             }
 
-            return row1.get_name_label ().collate (row2.get_name_label ()); /* Else sort in name order */
+            return a_package_name.collate (b_package_name); /* Else sort in name order */
         }
 
         [CCode (instance_pos = -1)]
-        private void row_update_header (Widgets.AppListRow row, Widgets.AppListRow? before) {
-            bool update_available = row.get_update_available ();
-            bool is_driver = row.get_is_driver ();
+        private void row_update_header (Widgets.PackageRow row, Widgets.PackageRow? before) {
+            bool update_available = false;
+            bool is_driver = false;
+            var row_package = row.get_package ();
+            if (row_package != null) {
+                update_available = row_package.update_available || row_package.is_updating;
+                is_driver = row_package.is_driver;
+            }
+
+
+            bool before_update_available = false;
+            bool before_is_driver = false;
+            if (before != null) {
+                var before_package = before.get_package ();
+                if (before_package != null) {
+                    before_update_available = before_package.update_available || before_package.is_updating;
+                    before_is_driver = before_package.is_driver;
+                }
+            }
 
             if (update_available) {
-                if (before != null && update_available == before.get_update_available ()) {
+                if (before != null && update_available == before_update_available) {
                     row.set_header (null);
                     return;
                 }
@@ -203,7 +222,7 @@ namespace AppCenter.Views {
                 header.show_all ();
                 row.set_header (header);
             } else if (is_driver) {
-                if (before != null && is_driver == before.get_is_driver ()) {
+                if (before != null && is_driver == before_is_driver) {
                     row.set_header (null);
                     return;
                 }
@@ -212,7 +231,7 @@ namespace AppCenter.Views {
                 header.show_all ();
                 row.set_header (header);
             } else {
-                if (before != null && is_driver == before.get_is_driver () && update_available == before.get_update_available ()) {
+                if (before != null && is_driver == before_is_driver && update_available == before_update_available) {
                     row.set_header (null);
                     return;
                 }
@@ -233,16 +252,6 @@ namespace AppCenter.Views {
             }
 
             updating_all_apps = true;
-            apps_done = 0; // Cancelled or updated apps
-            apps_remaining_started = false;
-
-            apps_to_update.clear ();
-            // Collect all ready to update apps
-            foreach (var package in get_packages ()) {
-                if (package.update_available && !package.should_nag_update) {
-                    apps_to_update.add (package);
-                }
-            }
 
             foreach (var row in list_box.get_children ()) {
                 if (row is Widgets.PackageRow) {
@@ -250,80 +259,26 @@ namespace AppCenter.Views {
                 }
             };
 
-            // Update all updateable apps
-            if (apps_to_update.size > 0) {
-                first_package = apps_to_update[0];
-                first_package.info_changed.connect_after (after_first_package_info_changed);
-                first_package.update.begin (false, () => {
-                    on_app_update_end ();
-                });
-            } else {
-                updating_all_apps = false;
-            }
-        }
-
-        private void after_first_package_info_changed (AppCenterCore.ChangeInformation.Status status) {
-            assert (!apps_remaining_started);
-
-            /* Only interested if the first package has started running or has been cancelled (before starting) */
-            if (status != AppCenterCore.ChangeInformation.Status.CANCELLED && status != AppCenterCore.ChangeInformation.Status.RUNNING) {
-                return;
-            }
-
-            /* Not interested in any future changes for first_package */
-            first_package.info_changed.disconnect (after_first_package_info_changed);
-
-            Idle.add (() => {
-                if (status != AppCenterCore.ChangeInformation.Status.CANCELLED) { /* must  be running */
-                    apps_remaining_started = true;
-                    for (int i = 1; i < apps_to_update.size; i++) {
-                        apps_to_update[i].update.begin (false, () => {
-                            on_app_update_end ();
-                        });
+            foreach (var package in get_packages ()) {
+                if (package.update_available && !package.should_nag_update) {
+                    try {
+                        yield package.update (false);
+                    } catch (Error e) {
+                        // If one package update was cancelled, drop out of the loop of updating the rest
+                        if (e is GLib.IOError.CANCELLED) {
+                            break;
+                        } else {
+                            new UpgradeFailDialog (package, e).present ();
+                            break;
+                        }
                     }
-                } else { /* it was aborted - do not start updating the rest */
-                    finish_updating_all_apps ();
-                }
-
-                return GLib.Source.REMOVE;
-            });
-        }
-
-        private void on_app_update_end () {
-            update_mutex.@lock ();
-            if (updating_all_apps) {
-                apps_done++;
-
-                if (apps_done >= apps_to_update.size) {
-                    finish_updating_all_apps ();
                 }
             }
-            update_mutex.unlock ();
-        }
 
-        private void finish_updating_all_apps () {
-            assert (updating_all_apps && packages_changing == 0);
+            unowned AppCenterCore.Client client = AppCenterCore.Client.get_default ();
+            yield client.refresh_updates ();
 
             updating_all_apps = false;
-
-            /* Set the action button sensitive and emit "changed" on each row in order to update
-             * the sort order and headers (any change would have been ignored while updating) */
-            Idle.add_full (GLib.Priority.LOW, () => {
-                foreach (var row in list_box.get_children ()) {
-                    if (row is Widgets.PackageRow) {
-                        var pkg_row = ((Widgets.PackageRow)(row));
-
-                        pkg_row.set_action_sensitive (true);
-                    }
-                }
-
-                list_box.invalidate_sort ();
-
-                unowned AppCenterCore.Client client = AppCenterCore.Client.get_default ();
-                client.refresh_updates ();
-
-                return GLib.Source.REMOVE;
-            });
         }
     }
 }

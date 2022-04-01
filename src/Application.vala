@@ -58,6 +58,8 @@ public class AppCenter.App : Gtk.Application {
         flags |= ApplicationFlags.HANDLES_OPEN;
         Intl.setlocale (LocaleCategory.ALL, "");
         Intl.textdomain (Build.GETTEXT_PACKAGE);
+        Intl.bindtextdomain (Build.GETTEXT_PACKAGE, Build.LOCALEDIR);
+        Intl.bind_textdomain_codeset (Build.GETTEXT_PACKAGE, "UTF-8");
 
         add_main_option_entries (APPCENTER_OPTIONS);
 
@@ -138,12 +140,36 @@ public class AppCenter.App : Gtk.Application {
     }
 
     public override void activate () {
+        var granite_settings = Granite.Settings.get_default ();
+        var gtk_settings = Gtk.Settings.get_default ();
+
+        gtk_settings.gtk_application_prefer_dark_theme = granite_settings.prefers_color_scheme == Granite.Settings.ColorScheme.DARK;
+
+        granite_settings.notify["prefers-color-scheme"].connect (() => {
+            gtk_settings.gtk_application_prefer_dark_theme = granite_settings.prefers_color_scheme == Granite.Settings.ColorScheme.DARK;
+        });
+
         var provider = new Gtk.CssProvider ();
         provider.load_from_resource ("io/elementary/appcenter/application.css");
-        Gtk.StyleContext.add_provider_for_screen (Gdk.Screen.get_default (), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+        Gtk.StyleContext.add_provider_for_screen (
+          Gdk.Screen.get_default (),
+          provider,
+          Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        );
+
+        var fallback_provider = new Gtk.CssProvider ();
+        fallback_provider.load_from_resource ("io/elementary/appcenter/fallback.css");
+        Gtk.StyleContext.add_provider_for_screen (
+          Gdk.Screen.get_default (),
+          fallback_provider,
+          Gtk.STYLE_PROVIDER_PRIORITY_FALLBACK
+        );
 
         var client = AppCenterCore.Client.get_default ();
 
+        if (fake_update_packages != null) {
+            AppCenterCore.PackageKitBackend.get_default ().fake_packages = fake_update_packages;
+        }
 
         if (silent) {
             NetworkMonitor.get_default ().network_changed.connect ((available) => {
@@ -155,6 +181,16 @@ public class AppCenter.App : Gtk.Application {
             silent = false;
             hold ();
             return;
+        }
+
+        if (local_path != null) {
+            var file = File.new_for_commandline_arg (local_path);
+
+            try {
+                local_package = AppCenterCore.PackageKitBackend.get_default ().add_local_component_file (file);
+            } catch (Error e) {
+                warning ("Failed to load local AppStream XML file: %s", e.message);
+            }
         }
 
         if (main_window == null) {
@@ -248,22 +284,30 @@ public class AppCenter.App : Gtk.Application {
         switch (operation) {
             case AppCenterCore.Package.State.INSTALLING:
                 if (error == null) {
-                    // Check if window is focused
-                    if (main_window != null) {
-                        var win = main_window.get_window ();
-                        if (win != null && (win.get_state () & Gdk.WindowState.FOCUSED) != 0) {
-                            break;
+                    if (package.get_can_launch ()) {
+                        // Check if window is focused
+                        if (main_window != null) {
+                            var win = main_window.get_window ();
+                            if (win != null && (win.get_state () & Gdk.WindowState.FOCUSED) != 0) {
+                                main_window.send_installed_toast (package);
+
+                                break;
+                            }
                         }
+
+                        var notification = new Notification (_("The app has been installed"));
+                        notification.set_body (_("“%s” has been installed").printf (package.get_name ()));
+                        notification.set_icon (new ThemedIcon ("process-completed"));
+                        notification.set_default_action ("app.open-application");
+
+                        send_notification ("installed", notification);
                     }
-
-                    var notification = new Notification (_("Application installed"));
-                    notification.set_body (_("%s has been successfully installed").printf (package.get_name ()));
-                    notification.set_icon (new ThemedIcon ("system-software-install"));
-                    notification.set_default_action ("app.open-application");
-
-                    send_notification ("installed", notification);
                 } else {
                     // Check if permission was denied or the operation was cancelled
+                    if (error.matches (IOError.quark (), 19) || error.matches (Pk.ClientError.quark (), 303)) {
+                        break;
+                    }
+
                     var dialog = new InstallFailDialog (package, error);
 
                     dialog.show_all ();
